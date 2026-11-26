@@ -49,6 +49,12 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 .btn.primary { background:var(--navy); color:#fff; }
 .btn.kakao { background:#fee500; color:#191919; }
 .btn:disabled { opacity:.5; }
+.btn.reset { background:#fff; color:#c62828; border:1.5px solid #e6b3b1; }
+@media (max-width:600px) {
+  .bar .in { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; }
+  .bar .btn { padding:10px 4px; font-size:13px; white-space:nowrap; }
+  .app { padding-bottom:140px; }
+}
 .toast { position:fixed; left:50%; bottom:90px; transform:translateX(-50%); background:#222; color:#fff;
   padding:8px 14px; border-radius:18px; font-size:13px; opacity:0; transition:.2s; pointer-events:none; z-index:9; }
 .toast.on { opacity:.92; }
@@ -144,9 +150,10 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 <div class="bar" id="bar"><div class="in">
   <button class="btn primary" id="bShare">공유 (PDF)</button>
   <button class="btn kakao" id="bImg">이미지로 공유</button>
-  <button class="btn" id="bText">텍스트 공유/복사</button>
+  <button class="btn" id="bText">텍스트</button>
   <button class="btn" id="bMail">이메일</button>
   <button class="btn" id="bPdf">PDF 저장</button>
+  <button class="btn reset" id="bReset">초기화</button>
 </div></div>
 <div class="toast" id="toast"></div>
 
@@ -520,6 +527,14 @@ async function busy(btn, fn) {
 }
 $('bShare').onclick = e => busy(e.currentTarget, async () => shareFile(await pdfBlob(), baseName() + '.pdf', 'application/pdf'));
 $('bImg').onclick = e => busy(e.currentTarget, async () => shareFile(await pngBlob(), baseName() + '.png', 'image/png'));
+$('bReset').onclick = () => {
+  sources = []; model = null;
+  $('file').value = ''; $('files').innerHTML = ''; $('sheet').innerHTML = '';
+  $('stage').classList.remove('on'); $('stage').style.height = ''; $('bar').classList.remove('on');
+  msg('', '');
+  scrollTo({ top: 0, behavior: 'smooth' });
+  toast('초기화했습니다. 새 PDF를 올려 주세요.');
+};
 $('bPdf').onclick = e => busy(e.currentTarget, async () => { await download(await pdfBlob(), baseName() + '.pdf'); });
 async function copyText(text, okMsg) {
   try { await navigator.clipboard.writeText(text); toast(okMsg); return true; }
