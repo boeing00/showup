@@ -1,5 +1,5 @@
 // Offline cache: app shell + CDN libraries. Roster PDFs are never cached or sent anywhere.
-const CACHE = 'showup-v4';
+const CACHE = 'showup-v5';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 const CDN = [
   'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
@@ -8,7 +8,9 @@ const CDN = [
   'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs',
 ];
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll([...SHELL, ...CDN]).catch(() => c.addAll(SHELL))));
+  // cache:'reload' bypasses the browser's HTTP cache (GitHub Pages sends max-age=600)
+  const fresh = SHELL.map(u => new Request(u, { cache: 'reload' }));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll([...fresh, ...CDN]).catch(() => c.addAll(fresh))));
   self.skipWaiting();
 });
 self.addEventListener('activate', e => {
@@ -33,8 +35,9 @@ self.addEventListener('fetch', e => {
     })));
     return;
   }
-  // app files: network first so updates show up, cache when offline
-  e.respondWith(fetch(req).then(res => {
+  // app files: network first (revalidated with the server, never a stale HTTP-cache copy),
+  // cached copy only when offline
+  e.respondWith(fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(res => {
     const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return res;
-  }).catch(() => caches.match(req).then(hit => hit || caches.match('./index.html'))));
+  }).catch(() => caches.match(req, { ignoreSearch: true }).then(hit => hit || caches.match('./index.html'))));
 });

@@ -570,8 +570,17 @@ $('bText').onclick = async () => {
   if (!inArtifact() && navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
   await copyText(text, '텍스트를 복사했습니다. 카톡에 붙여넣기 하세요.');
 };
-if ('serviceWorker' in navigator && !inArtifact() && location.protocol !== 'file:')
-  navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && !inArtifact() && location.protocol !== 'file:') {
+  // check for a new version on every open; when it takes over, reload once (only if nothing is loaded yet)
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    if (!sources.length) location.reload(); else toast('새 버전이 있습니다. 앱을 다시 열면 적용됩니다.');
+  });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
+}
 
 $('bMail').onclick = async () => {
   const subject = `${model.ym[0]}년 ${model.ym[1]}월 스케줄`, body = summaryText(model);
