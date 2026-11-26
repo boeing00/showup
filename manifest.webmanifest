@@ -1,0 +1,16 @@
+{
+  "name": "Show Up 스케줄",
+  "short_name": "Show Up",
+  "description": "크루 로스터 PDF로 Show Up 시간을 계산해 월간 스케줄로 정리",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef1f6",
+  "theme_color": "#0b3d91",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

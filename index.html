@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Show Up 스케줄</title>
+<meta name="theme-color" content="#0b3d91">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Show Up">
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<style>
+:root { color-scheme:light; --navy:#0b3d91; --amber:#c77700; --bg:#eef1f6; --ink:#1c2433; --mute:#5a6478; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink);
+  font-family:'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR','Segoe UI',sans-serif; }
+.app { max-width:900px; margin:0 auto; padding:16px 12px 110px; }
+.top h1 { margin:4px 0 2px; font-size:20px; color:var(--navy); }
+.top p { margin:0 0 12px; color:var(--mute); font-size:13px; }
+.drop { display:block; border:2px dashed #9fb2d6; border-radius:12px; background:#fff; padding:18px 14px;
+  text-align:center; cursor:pointer; transition:.15s; }
+.drop.over { border-color:var(--navy); background:#f4f7fd; }
+.drop b { color:var(--navy); font-size:15px; }
+.drop .hint { color:var(--mute); font-size:12px; margin-top:4px; }
+.drop input { display:none; }
+.files { margin:8px 0 0; display:flex; flex-wrap:wrap; gap:6px; }
+.chip { background:#fff; border:1px solid #d5dceb; border-radius:14px; padding:3px 10px; font-size:12px; color:var(--mute); }
+.chip.ok { border-color:#9cc59a; color:#2e7d32; }
+details.cfg { margin:10px 0; background:#fff; border-radius:10px; padding:8px 12px; font-size:13px; }
+details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
+.cfg .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; align-items:center; }
+.cfg label { display:flex; gap:6px; align-items:center; }
+.cfg input { width:64px; padding:5px 6px; border:1px solid #cfd6e4; border-radius:6px; font-size:13px; }
+.msg { margin:10px 0; padding:10px 12px; border-radius:8px; font-size:13px; display:none; }
+.msg.err { display:block; background:#fdecea; color:#a12622; }
+.msg.info { display:block; background:#e8f0fd; color:var(--navy); }
+.stage { margin-top:12px; overflow:hidden; display:none; }
+.stage.on { display:block; }
+.bar { position:fixed; left:0; right:0; bottom:0; background:#fff; box-shadow:0 -2px 12px rgba(0,0,0,.08);
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom)); display:none; }
+.bar.on { display:block; }
+.bar .in { max-width:900px; margin:0 auto; display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+.btn { border:0; border-radius:10px; padding:10px 14px; font-size:14px; font-weight:700; cursor:pointer;
+  background:#e7ecf6; color:var(--navy); font-family:inherit; }
+.btn.primary { background:var(--navy); color:#fff; }
+.btn.kakao { background:#fee500; color:#191919; }
+.btn:disabled { opacity:.5; }
+.toast { position:fixed; left:50%; bottom:90px; transform:translateX(-50%); background:#222; color:#fff;
+  padding:8px 14px; border-radius:18px; font-size:13px; opacity:0; transition:.2s; pointer-events:none; z-index:9; }
+.toast.on { opacity:.92; }
+
+/* ---------- A4 sheet (same design as the PDF script) ---------- */
+.sheet { width:794px; background:#fff; padding:26px 26px 22px; transform-origin:top left; font-size:9pt; color:#1c2433;
+  font-family:'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR','Segoe UI',sans-serif; }
+.sheet .hdr { display:flex; justify-content:space-between; align-items:flex-end;
+  border-bottom:3px solid #0b3d91; padding-bottom:6px; margin-bottom:9px; }
+.sheet .hdr h2 { margin:0; font-size:16pt; color:#0b3d91; letter-spacing:.5px; }
+.sheet .hdr .sub { color:#5a6478; font-size:9pt; margin-top:2px; }
+.sheet .hdr .right { text-align:right; font-size:8.5pt; color:#5a6478; }
+.sheet .stats { display:flex; gap:6px; margin-bottom:7px; }
+.sheet .stat { flex:1; border-radius:6px; padding:5px 8px; background:#f2f5fb; }
+.sheet .stat b { display:block; font-size:12pt; }
+.sheet .stat span { font-size:7.5pt; color:#5a6478; letter-spacing:.4px; }
+.sheet table { width:100%; border-collapse:collapse; }
+.sheet th { background:#0b3d91; color:#fff; font-size:8pt; font-weight:600; padding:4px 5px; text-align:left; white-space:nowrap; }
+.sheet th.c { text-align:center; }
+.sheet th.su { background:#c77700; }
+.sheet td { padding:2px 5px; border-bottom:1px solid #e3e7ef; vertical-align:middle; }
+.sheet td.d { white-space:nowrap; font-weight:700; width:52px; }
+.sheet td.d .w { font-weight:400; font-size:8pt; color:#5a6478; margin-left:2px; }
+.sheet tr.sun td.d, .sheet tr.sun td.d .w { color:#c62828; }
+.sheet tr.sat td.d, .sheet tr.sat td.d .w { color:#1565c0; }
+.sheet td.k { width:58px; }
+.sheet .b { display:inline-block; min-width:46px; text-align:center; border-radius:10px; padding:2px 7px;
+  font-size:7.5pt; font-weight:700; letter-spacing:.3px; }
+.sheet .b-FLY { background:#0b3d91; color:#fff; } .sheet .b-LO { background:#dbe6f7; color:#0b3d91; }
+.sheet .b-STBY { background:#efe3fb; color:#6a1b9a; } .sheet .b-RES { background:#d9f2ee; color:#00695c; }
+.sheet .b-OFF { background:#e8f3e1; color:#2e7d32; } .sheet .b-ETC { background:#eceff3; color:#455a64; }
+.sheet tr.FLY td { background:#fbfcff; }
+.sheet tr.OFF td:not(.d) { color:#2e7d32; } .sheet tr.OFF td { background:#f7fbf4; }
+.sheet td.su { width:58px; text-align:center; font-weight:700; font-size:10pt; line-height:1.15; color:#8a4b00; white-space:nowrap; }
+.sheet tr.has-su td.su { background:#fff3d6; }
+.sheet td.su .s, .sheet td.sta .s { display:block; font-size:6.5pt; font-weight:600; color:#a0712b; }
+.sheet td.sta .s { color:#7a8496; }
+.sheet td.std { width:46px; text-align:center; font-weight:700; font-size:10pt; color:#0b3d91; white-space:nowrap; }
+.sheet tr.has-su td.std { background:#eef3fc; }
+.sheet td.sta { width:54px; text-align:center; font-weight:700; font-size:10pt; color:#37474f; white-space:nowrap; line-height:1.15; }
+.sheet td.duty { width:40px; text-align:center; white-space:nowrap; }
+.sheet .dt { display:inline-block; min-width:30px; border-radius:4px; padding:1px 5px; font-weight:800; font-size:10pt;
+  background:#0b3d91; color:#fff; letter-spacing:.5px; }
+.sheet .line { line-height:1.35; }
+.sheet .flt { font-weight:700; color:#0b3d91; margin-right:6px; }
+.sheet .rt { font-weight:700; margin-right:8px; }
+.sheet .tm { margin-right:8px; }
+.sheet .sm { font-size:7.5pt; color:#5a6478; }
+.sheet .crew { line-height:1.4; }
+.sheet .cm { display:inline-block; font-size:6.6pt; color:#3b4456; background:#eef1f6; border-radius:3px;
+  padding:0 3px; margin:0 2px 1px 0; white-space:nowrap; }
+.sheet .cm b { color:#0b3d91; margin-right:3px; }
+.sheet .cm.me { background:#0b3d91; color:#fff; } .sheet .cm.me b { color:#fff; }
+.sheet .note { margin-top:5px; font-size:7.5pt; color:#5a6478; border-left:3px solid #c77700; padding:3px 8px; }
+
+@media print {
+  @page { size:A4; margin:0; }
+  body { background:#fff; }
+  .top, .drop, .files, details.cfg, .msg, .bar, .toast { display:none !important; }
+  .app { padding:0; max-width:none; }
+  .stage { display:block !important; height:auto !important; overflow:visible; margin:0; }
+  .sheet { transform:none !important; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="top">
+    <h1>Show Up 스케줄</h1>
+    <p>Fridge View · Crew Roster PDF를 올리면 Show Up을 계산해 월간 스케줄로 정리합니다. 파일은 이 기기 밖으로 나가지 않습니다.</p>
+  </div>
+
+  <label class="drop" id="drop">
+    <b>PDF 파일 선택 또는 끌어다 놓기</b>
+    <div class="hint">Fridge View + Crew Roster 두 개를 함께 올리면 크루·듀티까지 표시 (하나만 올려도 동작)</div>
+    <input type="file" id="file" accept="application/pdf,.pdf" multiple>
+  </label>
+  <div class="files" id="files"></div>
+
+  <details class="cfg">
+    <summary>Show Up 규칙 설정</summary>
+    <div class="row">
+      <label>베이스 <input id="cBase" value="ICN" maxlength="3"></label>
+      <label>베이스 출발 STD − <input id="cBaseMin" type="number" value="95"> 분</label>
+      <label>해외 출발 STD − <input id="cOutMin" type="number" value="80"> 분</label>
+    </div>
+  </details>
+
+  <div class="msg" id="msg"></div>
+  <div class="stage" id="stage"><div class="sheet" id="sheet"></div></div>
+</div>
+
+<div class="bar" id="bar"><div class="in">
+  <button class="btn primary" id="bShare">공유 (PDF)</button>
+  <button class="btn kakao" id="bImg">이미지로 공유</button>
+  <button class="btn" id="bText">텍스트 공유/복사</button>
+  <button class="btn" id="bMail">이메일</button>
+  <button class="btn" id="bPdf">PDF 저장</button>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+
+// ------------------------------------------------------------------ constants
+const TZ = {
+  ICN:'Asia/Seoul',GMP:'Asia/Seoul',PUS:'Asia/Seoul',CJU:'Asia/Seoul',
+  LAX:'America/Los_Angeles',SFO:'America/Los_Angeles',SEA:'America/Los_Angeles',LAS:'America/Los_Angeles',
+  JFK:'America/New_York',IAD:'America/New_York',BOS:'America/New_York',ATL:'America/New_York',
+  ORD:'America/Chicago',DFW:'America/Chicago',YVR:'America/Vancouver',YYZ:'America/Toronto',
+  HNL:'Pacific/Honolulu',SYD:'Australia/Sydney',BNE:'Australia/Brisbane',AKL:'Pacific/Auckland',
+  NRT:'Asia/Tokyo',HND:'Asia/Tokyo',KIX:'Asia/Tokyo',PEK:'Asia/Shanghai',PVG:'Asia/Shanghai',
+  HKG:'Asia/Hong_Kong',TPE:'Asia/Taipei',SIN:'Asia/Singapore',BKK:'Asia/Bangkok',
+  SGN:'Asia/Ho_Chi_Minh',HAN:'Asia/Ho_Chi_Minh',MNL:'Asia/Manila',CGK:'Asia/Jakarta',
+  DEL:'Asia/Kolkata',DXB:'Asia/Dubai',CDG:'Europe/Paris',FRA:'Europe/Berlin',LHR:'Europe/London',
+  FCO:'Europe/Rome',MAD:'Europe/Madrid',AMS:'Europe/Amsterdam',IST:'Europe/Istanbul',
+  PRG:'Europe/Prague',ZRH:'Europe/Zurich',
+};
+const FLT_RE = /^[A-Z0-9]{2}\d{1,4}[A-Z]?$/, APT_RE = /^[A-Z]{3}$/, DT_RE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
+const RANKS = new Set(['CAP','FO','SO','CP','FE','INS']);
+const OFF_CODES = new Set(['DO','T_DO','ATDO','AL','VAC','OFF','LV','ALV']);
+const FV_FLT = /^([A-Z0-9]{2}\d{1,4}[A-Z]?) ([A-Z]{3})(?: (\d\d:\d\d))? - ([A-Z]{3})(?: (\d\d:\d\d))?$/;
+const FV_DUTY = /^(\S+) ([A-Z]{3}) (\d\d:\d\d) - ([A-Z]{3}) (\d\d:\d\d)$/;
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MON3 = MONTHS.map(m => m.slice(0,3));
+const DOW = '일월화수목금토';  // JS getUTCDay: 0=Sun
+
+// ------------------------------------------------------------------ time helpers
+// Local wall-clock times are kept as "naive" ms (Date.UTC of the wall clock).
+const naive = (y,mo,d,h=0,mi=0) => Date.UTC(y,mo-1,d,h,mi);
+const p2 = n => String(n).padStart(2,'0');
+const HM = t => { const d = new Date(t); return `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`; };
+const MD = t => { const d = new Date(t); return `${p2(d.getUTCMonth()+1)}/${p2(d.getUTCDate())}`; };
+const dayKey = t => { const d = new Date(t); return `${d.getUTCFullYear()}-${p2(d.getUTCMonth()+1)}-${p2(d.getUTCDate())}`; };
+const dayDiff = (a,b) => Math.round((naive(...dayKey(b).split('-').map(Number)) - naive(...dayKey(a).split('-').map(Number))) / 864e5);
+const dur = ms => { const m = Math.round(ms/60000); return `${Math.floor(m/60)}:${p2(m%60)}`; };
+const atTime = (dkey, hhmm) => { const [y,mo,d] = dkey.split('-').map(Number); const [h,mi] = hhmm.split(':').map(Number); return naive(y,mo,d,h,mi); };
+const fmtCache = {};
+function tzOffset(tz, utcMs) {
+  const f = fmtCache[tz] ||= new Intl.DateTimeFormat('en-US', { timeZone:tz, hourCycle:'h23',
+    year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  const o = {}; for (const p of f.formatToParts(new Date(utcMs))) o[p.type] = p.value;
+  return Date.UTC(+o.year, +o.month-1, +o.day, +o.hour % 24, +o.minute, +o.second) - utcMs;
+}
+function realUTC(ap, t) {           // wall-clock at airport -> true UTC ms (null if unknown airport)
+  const tz = TZ[ap]; if (!tz || t == null) return null;
+  const o1 = tzOffset(tz, t - tzOffset(tz, t));
+  return t - o1;
+}
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// ------------------------------------------------------------------ PDF -> lines
+async function pdfLines(file) {
+  const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const out = [];
+  for (let i = 1; i <= doc.numPages; i++) {
+    const tc = await (await doc.getPage(i)).getTextContent();
+    for (const it of tc.items) { const s = (it.str || '').trim(); if (s) out.push(s); }
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ parsers
+function parseRoster(lines) {
+  const header = { title: lines[0] || '', stats: lines[1] || '' };
+  const flights = [];
+  for (let i = 0; i < lines.length; ) {
+    const l = lines[i];
+    if (FLT_RE.test(l) && i + 5 < lines.length && APT_RE.test(lines[i+1]) && DT_RE.test(lines[i+2])
+        && APT_RE.test(lines[i+3]) && DT_RE.test(lines[i+4])) {
+      const dt = s => { const m = s.match(DT_RE); return naive(+m[1], +m[2], +m[3], +m[4], +m[5]); };
+      const f = { no:l, dep:lines[i+1], std:dt(lines[i+2]), arr:lines[i+3], sta:dt(lines[i+4]), ac:lines[i+5], crew:[] };
+      i += 6;
+      while (i + 4 < lines.length && RANKS.has(lines[i])) { f.crew.push(lines.slice(i, i+5)); i += 5; }
+      flights.push(f);
+    } else i++;
+  }
+  return { header, flights };
+}
+
+function parseFridge(lines) {
+  const hm = lines.map(l => l.match(/^([A-Z][a-z]+) (\d{4})$/)).find(m => m && MONTHS.includes(m[1]));
+  if (!hm) throw new Error('Fridge View에서 "월 연도" 머리글을 찾지 못했습니다.');
+  const year = +hm[2], month = MONTHS.indexOf(hm[1]) + 1;
+  const title = lines.find(l => l.includes('|')) || '';
+  const days = {}, flights = [];
+  let cur = null;
+  for (const l of lines) {
+    const dm = l.match(/^([A-Z][a-z]{2}) (\d{1,2})$/);
+    if (dm && MON3.includes(dm[1])) {
+      const mo = MON3.indexOf(dm[1]) + 1;
+      const y = year + (mo < month && month === 12 ? 1 : 0) - (mo > month && month === 1 ? 1 : 0);
+      cur = `${y}-${p2(mo)}-${p2(+dm[2])}`; days[cur] ||= []; continue;
+    }
+    if (!cur || l.startsWith('ALL TIMINGS')) continue;
+    let m;
+    if ((m = l.match(FV_FLT))) {
+      const [, no, dep, t1, arr, t2] = m;
+      if (t1) {
+        const f = { no, dep, std: atTime(cur, t1), arr, sta: t2 ? atTime(cur, t2) : null, ac:'', crew:[] };
+        flights.push(f); days[cur].push(['FLY', f]);
+        if (t2) days[cur].push(['ARR', f]);
+      } else if (t2) {
+        const f = [...flights].reverse().find(f => f.no === no && f.sta == null && f.dep === dep);
+        if (f) { f.sta = atTime(cur, t2); days[cur].push(['ARR', f]); }
+      }
+    } else if ((m = l.match(FV_DUTY))) days[cur].push(['DUTY', m.slice(1)]);
+    else if (l.startsWith('LO ')) days[cur].push(['LO', l.slice(3).trim()]);
+    else if (OFF_CODES.has(l)) days[cur].push(['OFF', l]);
+    else if (l === 'RESERVE' || l.startsWith('RSV')) days[cur].push(['RES', l]);
+    else days[cur].push(['OTHER', l]);
+  }
+  return { header: { title, stats:'' }, ym:[year, month], days, flights };
+}
+const isFridge = lines => lines.some(l => l.startsWith('ALL TIMINGS')) || (lines.includes('Sunday') && lines.includes('Saturday'));
+
+// ------------------------------------------------------------------ model
+function buildModel(sources, cfg) {
+  let fridge = null, roster = null;
+  for (const s of sources) { if (isFridge(s.lines)) fridge = parseFridge(s.lines); else roster = parseRoster(s.lines); }
+  let header, ym, days, flights;
+  if (fridge) {
+    ({ header, ym, days, flights } = fridge);
+    for (const f of flights) {
+      const r = roster?.flights.find(r => r.no === f.no && r.std === f.std);
+      if (r) { f.ac = r.ac; f.crew = r.crew; f.sta ??= r.sta; }
+    }
+    if (roster) header = { title: roster.header.title || header.title, stats: roster.header.stats };
+  } else if (roster && roster.flights.length) {
+    ({ header, flights } = roster);
+    const d0 = new Date(flights[0].std); ym = [d0.getUTCFullYear(), d0.getUTCMonth() + 1];
+    days = {};
+    for (const f of flights) {
+      (days[dayKey(f.std)] ||= []).push(['FLY', f]);
+      if (f.sta != null) (days[dayKey(f.sta)] ||= []).push(['ARR', f]);
+    }
+  } else throw new Error('일정을 찾지 못했습니다. CWP Fridge View 또는 Crew Roster PDF인지 확인해 주세요.');
+  for (const f of flights) f.showup = f.std - 60000 * (f.dep === cfg.base ? cfg.baseMin : cfg.outMin);
+  const me = (header.title.match(/\|\s*(\d{6,8})\s*\|/) || [])[1] || null;
+  return { header, ym, days, flights, me, cfg };
+}
+
+function buildRows(M) {
+  const [year, month] = M.ym, { cfg, flights, me } = M;
+  const nd = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const lastArr = {}, cnt = { FLY:0, STBY:0, RES:0, OFF:0, LO:0, ETC:0 };
+  const rows = [];
+  for (let dn = 1; dn <= nd; dn++) {
+    const key = `${year}-${p2(month)}-${p2(dn)}`, evs = M.days[key] || [], kinds = evs.map(e => e[0]);
+    const cat = kinds.includes('FLY') ? 'FLY' : kinds.includes('DUTY') ? 'STBY' : kinds.includes('RES') ? 'RES'
+      : (evs.length && kinds.every(k => k === 'OFF')) ? 'OFF' : kinds.includes('ARR') ? 'FLY'
+      : kinds.includes('LO') ? 'LO' : 'ETC';
+    cnt[cat]++;
+    const R = { key, dn, wd: new Date(naive(year, month, dn)).getUTCDay(), cat, items: [], su:'', suNote:'', std:'', sta:'', staNote:'', duty:'' };
+    for (const [k, p] of evs) {
+      if (k === 'FLY') {
+        const a = realUTC(p.dep, p.std), b = realUTC(p.arr, p.sta);
+        const mine = p.crew.find(c => c[3] === me);
+        R.items.push({ t:'FLY', f:p, blk: a != null && b != null ? dur(b - a) : null });
+        R.std = HM(p.std);
+        R.su = HM(p.showup);
+        const rm = p.dep === cfg.base ? cfg.baseMin : cfg.outMin;
+        R.suNote = `STD −${Math.floor(rm/60)}:${p2(rm%60)}`;
+        if (p.sta != null) { R.sta = HM(p.sta); const dd = dayDiff(p.std, p.sta); if (dd) R.staNote = `${MD(p.sta)} (${dd > 0 ? '+' : ''}${dd})`; }
+        if (mine) R.duty = mine[2];
+      } else if (k === 'ARR') {
+        if (dayKey(p.std) !== key) {
+          const a = realUTC(p.dep, p.std), b = realUTC(p.arr, p.sta);
+          R.items.push({ t:'ARR', f:p, blk: a != null && b != null ? dur(b - a) : null });
+          if (!R.sta) R.sta = HM(p.sta);
+        }
+        lastArr[p.arr] = p;
+      } else if (k === 'LO') {
+        const arr = lastArr[p];
+        const nxt = arr && flights.find(f => f.dep === p && f.std > arr.sta);
+        let extra = null;
+        if (arr && nxt && dayKey(nxt.std) === key && realUTC(p, arr.sta) != null)
+          extra = { stay: dur(realUTC(p, nxt.std) - realUTC(p, arr.sta)), toSu: dur(realUTC(p, nxt.showup) - realUTC(p, arr.sta)) };
+        R.items.push({ t:'LO', ap:p, extra });
+      } else if (k === 'DUTY') {
+        R.items.push({ t:'DUTY', code:p[0], ap:p[1], from:p[2], to:p[4] });
+        R.su = p[2]; R.suNote = '';
+      } else R.items.push({ t:k, code:p });
+    }
+    rows.push(R);
+  }
+  let block = 0;
+  for (const f of flights) {
+    const a = realUTC(f.dep, f.std), b = realUTC(f.arr, f.sta);
+    if (a != null && b != null && new Date(f.std).getUTCMonth() + 1 === month) block += b - a;
+  }
+  return { rows, cnt, block, nFlt: flights.filter(f => new Date(f.std).getUTCMonth() + 1 === month).length };
+}
+
+// ------------------------------------------------------------------ render sheet
+function renderSheet(M) {
+  const { rows, cnt, block, nFlt } = buildRows(M);
+  const [year, month] = M.ym, { cfg, me } = M;
+  const tp = M.header.title.split('|').map(s => s.trim()).filter(Boolean);
+  const name = tp[0] || '', meta = tp.slice(1).join(' · ');
+  const rstats = [...M.header.stats.matchAll(/([A-Z]+)\s+([\d:]+)/g)].map(m => `${m[1]} ${m[2]}`).join(' · ');
+  const rule = m => `−${Math.floor(m/60)}:${p2(m%60)}`;
+  const label = { FLY:'비행', LO:'체류', STBY:'STBY', RES:'RESERVE', OFF:'OFF', ETC:'기타' };
+  const crewHtml = f => f.crew.length ? `<div class="crew">${[...f.crew]
+      .sort((a, b) => ((a[2][0] !== 'P') - (b[2][0] !== 'P')) || a[2].localeCompare(b[2]))
+      .map(c => `<span class="cm${c[3] === me ? ' me' : ''}"><b>${esc(c[2])}</b>${esc(c[4])}</span>`).join('')}</div>` : '';
+  const item = it => {
+    switch (it.t) {
+      case 'FLY': return `<div class="line"><span class="flt">${esc(it.f.no)}</span><span class="rt">${it.f.dep} → ${it.f.arr}</span>`
+        + (it.blk ? `<span class="tm sm">Block ${it.blk}</span>` : '') + (it.f.ac ? `<span class="sm">${esc(it.f.ac)}</span>` : '')
+        + `</div>${crewHtml(it.f)}`;
+      case 'ARR': return `<div class="line"><span class="flt">${esc(it.f.no)}</span><span class="rt">${it.f.dep} → ${it.f.arr}</span>`
+        + `<span class="tm">도착</span><span class="sm">(전일 ${HM(it.f.std)} 출발${it.blk ? `, Block ${it.blk}` : ''})</span></div>`;
+      case 'LO': return `<div class="line"><b>${esc(it.ap)}</b> 체류 (Layover)`
+        + (it.extra ? ` <span class="sm">· 체류 ${it.extra.stay} (Show Up까지 ${it.extra.toSu})</span>` : '') + '</div>';
+      case 'DUTY': return `<div class="line"><b>스탠바이</b> ${it.ap} ${it.from} – ${it.to} <span class="sm">(${esc(it.code)})</span></div>`;
+      case 'RES': return `<div class="line"><b>리저브</b> <span class="sm">(${esc(it.code)})</span></div>`;
+      case 'OFF': return `<div class="line"><b>OFF</b> <span class="sm">(${esc(it.code)})</span></div>`;
+      default: return `<div class="line">${esc(it.code)}</div>`;
+    }
+  };
+  const body = rows.map(R => {
+    const cls = [R.cat, R.wd === 0 ? 'sun' : R.wd === 6 ? 'sat' : '', R.su ? 'has-su' : ''].join(' ');
+    return `<tr class="${cls}"><td class="d">${p2(month)}/${p2(R.dn)}<span class="w">${DOW[R.wd]}</span></td>`
+      + `<td class="k"><span class="b b-${R.cat}">${label[R.cat]}</span></td>`
+      + `<td class="su">${R.su}${R.suNote ? `<span class="s">${R.suNote}</span>` : ''}</td>`
+      + `<td class="std">${R.std}</td>`
+      + `<td class="sta">${R.sta}${R.staNote ? `<span class="s">${R.staNote}</span>` : ''}</td>`
+      + `<td class="duty">${R.duty ? `<span class="dt">${esc(R.duty)}</span>` : ''}</td>`
+      + `<td>${R.items.length ? R.items.map(item).join('') : '<div class="line sm">—</div>'}</td></tr>`;
+  }).join('');
+  const cards = [['비행 편수', nFlt, '#0b3d91'], ['Block (계산)', dur(block), '#0b3d91'],
+    ['스탠바이', `${cnt.STBY}일`, '#6a1b9a'], ['리저브', `${cnt.RES}일`, '#00695c'], ['오프', `${cnt.OFF}일`, '#2e7d32']];
+  const now = new Date();
+  return `<div class="hdr"><div><h2>${year}년 ${month}월 스케줄</h2><div class="sub">${esc(name)}${meta ? ' · ' + esc(meta) : ''}</div></div>
+    <div class="right">Show Up 계산 포함 · 모든 시간 현지시각(SLT)<br>${esc(rstats)}</div></div>
+    <div class="stats">${cards.map(([k, v, c]) => `<div class="stat"><span>${k}</span><b style="color:${c}">${v}</b></div>`).join('')}</div>
+    <table><thead><tr><th>날짜</th><th>구분</th><th class="c su">SHOW UP</th><th class="c">STD</th><th class="c">STA</th><th class="c">DUTY</th><th>내용</th></tr></thead>
+    <tbody>${body}</tbody></table>
+    <div class="note">Show Up 규칙: ${esc(cfg.base)} 출발 STD ${rule(cfg.baseMin)}, 해외 출발 STD ${rule(cfg.outMin)}.
+    스탠바이의 SHOW UP 칸은 스탠바이 시작 시각(로스터 원문 그대로)입니다. Block·체류시간은 공항 시간대로 환산해 계산한 값입니다.
+    생성 ${now.getFullYear()}-${p2(now.getMonth()+1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}.</div>`;
+}
+
+function summaryText(M) {
+  const { rows } = buildRows(M), [year, month] = M.ym;
+  const name = (M.header.title.split('|')[0] || '').trim();
+  const out = [`[${year}년 ${month}월 스케줄]${name ? ' ' + name : ''}`, ''];
+  for (const R of rows) {
+    const d = `${p2(month)}/${p2(R.dn)}(${DOW[R.wd]})`;
+    const parts = [];
+    for (const it of R.items) {
+      if (it.t === 'FLY') parts.push(`${it.f.no} ${it.f.dep}→${it.f.arr} SHOW UP ${R.su} / STD ${R.std}`
+        + (it.f.sta != null ? ` / STA ${R.sta}${R.staNote ? '(+' + dayDiff(it.f.std, it.f.sta) + ')' : ''}` : '') + (R.duty ? ` [${R.duty}]` : ''));
+      else if (it.t === 'ARR') parts.push(`${it.f.no} ${it.f.arr} 도착 ${HM(it.f.sta)}`);
+      else if (it.t === 'LO') parts.push(`${it.ap} 체류`);
+      else if (it.t === 'DUTY') parts.push(`스탠바이 ${it.from}-${it.to}`);
+      else if (it.t === 'RES') parts.push('리저브');
+      else if (it.t === 'OFF') parts.push('OFF');
+      else parts.push(it.code);
+    }
+    out.push(`${d} ${parts.join(' · ') || '-'}`);
+  }
+  out.push('', `* Show Up: ${M.cfg.base} 출발 STD-${Math.floor(M.cfg.baseMin/60)}:${p2(M.cfg.baseMin%60)}, 해외 출발 STD-${Math.floor(M.cfg.outMin/60)}:${p2(M.cfg.outMin%60)} (현지시각)`);
+  return out.join('\n');
+}
+
+// ------------------------------------------------------------------ UI
+const $ = id => document.getElementById(id);
+let sources = [], model = null;
+const CFG_KEY = 'showup-cfg-v1';
+try { const c = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); if (c) { $('cBase').value = c.base; $('cBaseMin').value = c.baseMin; $('cOutMin').value = c.outMin; } } catch {}
+const cfg = () => ({ base: ($('cBase').value || 'ICN').toUpperCase().trim(), baseMin: +$('cBaseMin').value || 0, outMin: +$('cOutMin').value || 0 });
+
+function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove('on'), 2200); }
+function msg(t, kind) { const e = $('msg'); e.className = 'msg' + (t ? ' ' + kind : ''); e.textContent = t || ''; }
+
+function fit() {
+  const st = $('stage'), sh = $('sheet');
+  if (!st.classList.contains('on')) return;
+  const s = Math.min(1, st.clientWidth / 794);
+  sh.style.transform = s < 1 ? `scale(${s})` : '';
+  st.style.height = (sh.offsetHeight * s) + 'px';
+}
+addEventListener('resize', fit);
+
+function render() {
+  if (!sources.length) return;
+  const c = cfg(); localStorage.setItem(CFG_KEY, JSON.stringify(c));
+  try {
+    model = buildModel(sources, c);
+    $('sheet').innerHTML = renderSheet(model);
+    $('stage').classList.add('on'); $('bar').classList.add('on');
+    msg(model.flights.some(f => !f.crew.length) && sources.length < 2
+      ? 'Crew Roster PDF도 함께 올리면 크루 명단과 DUTY가 표시됩니다.' : '', 'info');
+    fit();
+  } catch (e) { console.error(e); msg(e.message, 'err'); $('stage').classList.remove('on'); $('bar').classList.remove('on'); }
+}
+
+async function addFiles(list) {
+  msg('PDF 읽는 중…', 'info');
+  for (const f of list) {
+    try {
+      const lines = await pdfLines(f);
+      const kind = isFridge(lines) ? 'fridge' : 'roster';
+      sources = sources.filter(s => s.kind !== kind);
+      sources.push({ name: f.name, kind, lines });
+    } catch (e) { console.error(e); msg(`${f.name}: PDF를 읽지 못했습니다 (${e.message})`, 'err'); return; }
+  }
+  $('files').innerHTML = sources.map(s => `<span class="chip ok">${s.kind === 'fridge' ? 'Fridge View' : 'Crew Roster'} · ${esc(s.name)}</span>`).join('');
+  render();
+}
+$('file').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
+const drop = $('drop');
+['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files].filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name))));
+['cBase','cBaseMin','cOutMin'].forEach(id => $(id).addEventListener('input', render));
+
+// ------------------------------------------------------------------ export
+const baseName = () => `schedule_${model.ym[0]}${p2(model.ym[1])}`;
+async function canvas() {
+  return html2canvas($('sheet'), { scale: 2, backgroundColor: '#ffffff', windowWidth: 900,
+    onclone: d => { const s = d.getElementById('sheet'); s.style.transform = 'none'; } });
+}
+async function pngBlob() { const c = await canvas(); return new Promise(r => c.toBlob(r, 'image/png')); }
+async function pdfBlob() {
+  const c = await canvas(), { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+  let w = 210, h = c.height * 210 / c.width;
+  if (h > 297) { w = w * 297 / h; h = 297; }
+  pdf.addImage(c.toDataURL('image/jpeg', 0.95), 'JPEG', (210 - w) / 2, 0, w, h);
+  return pdf.output('blob');
+}
+// Inside a Claude artifact, Web Share and <a download> are blocked; the platform's
+// `downloads` capability saves the file instead (Claude iOS app: native share sheet).
+let dl = null;
+if (window.claude?.use) window.claude.use('downloads').then(d => { dl = d; }).catch(() => {});
+const inArtifact = () => !!window.claude?.use;
+async function download(blob, name) {
+  if (dl) {
+    try { await dl.save({ filename: name, data: blob }); toast('저장했습니다'); }
+    catch (e) {
+      if (e?.code === 'declined') return;
+      if (e?.code === 'host_unavailable') toast('이 앱에서는 저장할 수 없습니다. 브라우저에서 열어 주세요.');
+      else toast('저장 실패: ' + (e?.message || e?.code || e));
+    }
+    return true;
+  }
+  if (inArtifact()) { toast('이 화면에서는 파일 저장을 쓸 수 없습니다.'); return false; }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('저장했습니다');
+  return true;
+}
+async function shareFile(blob, name, type) {
+  const file = new File([blob], name, { type });
+  const title = `${model.ym[0]}년 ${model.ym[1]}월 스케줄`;
+  if (!inArtifact() && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title, text: title }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  await download(blob, name);
+}
+async function busy(btn, fn) {
+  const t = btn.textContent; btn.disabled = true; btn.textContent = '만드는 중…';
+  try { await fn(); } catch (e) { console.error(e); toast('실패: ' + e.message); } finally { btn.disabled = false; btn.textContent = t; }
+}
+$('bShare').onclick = e => busy(e.currentTarget, async () => shareFile(await pdfBlob(), baseName() + '.pdf', 'application/pdf'));
+$('bImg').onclick = e => busy(e.currentTarget, async () => shareFile(await pngBlob(), baseName() + '.png', 'image/png'));
+$('bPdf').onclick = e => busy(e.currentTarget, async () => { await download(await pdfBlob(), baseName() + '.pdf'); });
+async function copyText(text, okMsg) {
+  try { await navigator.clipboard.writeText(text); toast(okMsg); return true; }
+  catch {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;top:-1000px';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch {}
+    ta.remove(); toast(ok ? okMsg : '복사 실패'); return ok;
+  }
+}
+$('bText').onclick = async () => {
+  const text = summaryText(model);
+  if (!inArtifact() && navigator.share) { try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  await copyText(text, '텍스트를 복사했습니다. 카톡에 붙여넣기 하세요.');
+};
+if ('serviceWorker' in navigator && !inArtifact() && location.protocol !== 'file:')
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+
+$('bMail').onclick = async () => {
+  const subject = `${model.ym[0]}년 ${model.ym[1]}월 스케줄`, body = summaryText(model);
+  await copyText(body, '본문을 복사했습니다. 메일 앱이 안 열리면 붙여넣기 하세요.');
+  location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+};
+
+</script>
+</body>
+</html>
