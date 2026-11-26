@@ -50,6 +50,15 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 .btn.kakao { background:#fee500; color:#191919; }
 .btn:disabled { opacity:.5; }
 .btn.reset { background:#fff; color:#c62828; border:1.5px solid #e6b3b1; }
+.sig { margin:28px auto 0; text-align:center; color:var(--mute); font-size:12px; }
+.sig .rule { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+.sig .rule::before, .sig .rule::after { content:''; flex:1; height:1px; background:linear-gradient(90deg, transparent, #c3cde0, transparent); }
+.sig .rule img { width:22px; height:22px; border-radius:6px; }
+.sig .q { letter-spacing:.3px; }
+.sig a { display:inline-block; margin-top:4px; color:var(--navy); font-weight:700; font-size:14px; text-decoration:none;
+  border-bottom:1.5px solid #c77700; padding-bottom:1px; }
+.sig a:hover { color:#c77700; }
+.sig .fine { margin-top:8px; font-size:11px; color:#8a93a6; }
 @media (max-width:600px) {
   .bar .in { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; }
   .bar .btn { padding:10px 4px; font-size:13px; white-space:nowrap; }
@@ -145,6 +154,13 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 
   <div class="msg" id="msg"></div>
   <div class="stage" id="stage"><div class="sheet" id="sheet"></div></div>
+
+  <footer class="sig">
+    <div class="rule"><img src="icon-192.png" alt=""></div>
+    <div class="q">Any inquiry</div>
+    <a id="sigMail" href="#">문의 메일</a>
+    <div class="fine">Show Up 스케줄 · 로스터 파일은 이 기기 안에서만 처리됩니다</div>
+  </footer>
 </div>
 
 <div class="bar" id="bar"><div class="in">
@@ -527,6 +543,10 @@ async function busy(btn, fn) {
 }
 $('bShare').onclick = e => busy(e.currentTarget, async () => shareFile(await pdfBlob(), baseName() + '.pdf', 'application/pdf'));
 $('bImg').onclick = e => busy(e.currentTarget, async () => shareFile(await pngBlob(), baseName() + '.png', 'image/png'));
+{ // signature: address assembled at runtime to keep it out of simple scrapers
+  const a = $('sigMail'), addr = ['moonsikyim', 'gmail.com'].join('@');
+  a.textContent = addr; a.href = 'mailto:' + addr + '?subject=' + encodeURIComponent('[Show Up 스케줄] 문의');
+}
 $('bReset').onclick = () => {
   sources = []; model = null;
   $('file').value = ''; $('files').innerHTML = ''; $('sheet').innerHTML = '';
