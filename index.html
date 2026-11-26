@@ -18,7 +18,8 @@
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--ink);
   font-family:'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR','Segoe UI',sans-serif; }
-.app { max-width:900px; margin:0 auto; padding:16px 12px 110px; }
+.app { max-width:900px; margin:0 auto; padding:16px 12px 14px; }
+body.has-bar .app { padding-bottom:110px; }
 .top h1 { margin:4px 0 2px; font-size:20px; color:var(--navy); }
 .top p { margin:0 0 12px; color:var(--mute); font-size:13px; }
 .drop { display:block; border:2px dashed #9fb2d6; border-radius:12px; background:#fff; padding:18px 14px;
@@ -50,19 +51,14 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 .btn.kakao { background:#fee500; color:#191919; }
 .btn:disabled { opacity:.5; }
 .btn.reset { background:#fff; color:#c62828; border:1.5px solid #e6b3b1; }
-.sig { margin:28px auto 0; text-align:center; color:var(--mute); font-size:12px; }
-.sig .rule { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-.sig .rule::before, .sig .rule::after { content:''; flex:1; height:1px; background:linear-gradient(90deg, transparent, #c3cde0, transparent); }
-.sig .rule img { width:22px; height:22px; border-radius:6px; }
-.sig .q { letter-spacing:.3px; }
-.sig a { display:inline-block; margin-top:4px; color:var(--navy); font-weight:700; font-size:14px; text-decoration:none;
-  border-bottom:1.5px solid #c77700; padding-bottom:1px; }
-.sig a:hover { color:#c77700; }
-.sig .fine { margin-top:8px; font-size:11px; color:#8a93a6; }
+.app { min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; }
+.sig { margin-top:auto; padding:40px 0 4px; text-align:center; font-size:11px; color:#9aa3b5; letter-spacing:.2px; }
+.sig a { color:#7a8496; text-decoration:none; border-bottom:1px dotted #b9c1d0; }
+.sig a:hover { color:var(--navy); border-bottom-color:var(--navy); }
 @media (max-width:600px) {
   .bar .in { display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:6px; }
   .bar .btn { padding:10px 4px; font-size:13px; white-space:nowrap; }
-  .app { padding-bottom:140px; }
+  body.has-bar .app { padding-bottom:140px; }
 }
 .toast { position:fixed; left:50%; bottom:90px; transform:translateX(-50%); background:#222; color:#fff;
   padding:8px 14px; border-radius:18px; font-size:13px; opacity:0; transition:.2s; pointer-events:none; z-index:9; }
@@ -122,7 +118,7 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 @media print {
   @page { size:A4; margin:0; }
   body { background:#fff; }
-  .top, .drop, .files, details.cfg, .msg, .bar, .toast { display:none !important; }
+  .top, .drop, .files, details.cfg, .msg, .bar, .toast, .sig { display:none !important; }
   .app { padding:0; max-width:none; }
   .stage { display:block !important; height:auto !important; overflow:visible; margin:0; }
   .sheet { transform:none !important; }
@@ -155,12 +151,7 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
   <div class="msg" id="msg"></div>
   <div class="stage" id="stage"><div class="sheet" id="sheet"></div></div>
 
-  <footer class="sig">
-    <div class="rule"><img src="icon-192.png" alt=""></div>
-    <div class="q">Any inquiry</div>
-    <a id="sigMail" href="#">문의 메일</a>
-    <div class="fine">Show Up 스케줄 · 로스터 파일은 이 기기 안에서만 처리됩니다</div>
-  </footer>
+  <footer class="sig">Any inquiry · <a id="sigMail" href="#">문의 메일</a></footer>
 </div>
 
 <div class="bar" id="bar"><div class="in">
@@ -465,11 +456,11 @@ function render() {
   try {
     model = buildModel(sources, c);
     $('sheet').innerHTML = renderSheet(model);
-    $('stage').classList.add('on'); $('bar').classList.add('on');
+    $('stage').classList.add('on'); $('bar').classList.add('on'); document.body.classList.add('has-bar');
     msg(model.flights.some(f => !f.crew.length) && sources.length < 2
       ? 'Crew Roster PDF도 함께 올리면 크루 명단과 DUTY가 표시됩니다.' : '', 'info');
     fit();
-  } catch (e) { console.error(e); msg(e.message, 'err'); $('stage').classList.remove('on'); $('bar').classList.remove('on'); }
+  } catch (e) { console.error(e); msg(e.message, 'err'); $('stage').classList.remove('on'); $('bar').classList.remove('on'); document.body.classList.remove('has-bar'); }
 }
 
 async function addFiles(list) {
@@ -550,7 +541,7 @@ $('bImg').onclick = e => busy(e.currentTarget, async () => shareFile(await pngBl
 $('bReset').onclick = () => {
   sources = []; model = null;
   $('file').value = ''; $('files').innerHTML = ''; $('sheet').innerHTML = '';
-  $('stage').classList.remove('on'); $('stage').style.height = ''; $('bar').classList.remove('on');
+  $('stage').classList.remove('on'); $('stage').style.height = ''; $('bar').classList.remove('on'); document.body.classList.remove('has-bar');
   msg('', '');
   scrollTo({ top: 0, behavior: 'smooth' });
   toast('초기화했습니다. 새 PDF를 올려 주세요.');
