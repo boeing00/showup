@@ -151,7 +151,7 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
     <summary>Show Up 규칙 설정</summary>
     <div class="hint2">FOM 2.2.9.2 Show Up Time for Flight Crew 기준 (STD 전, 분)</div>
     <table class="rules">
-      <tr><th rowspan="3">국내선</th><td>GMP 출발</td><td><input id="rDomGMP" type="number" value="60"> 분</td></tr>
+      <tr><th rowspan="3">국내선</th><td>GMP 출발</td><td><input id="rDomGMP" type="number" value="70"> 분</td></tr>
       <tr><td>ICN 출발</td><td><input id="rDomICN" type="number" value="70"> 분</td></tr>
       <tr><td>그 외 국내 공항</td><td><input id="rDomStn" type="number" value="50"> 분</td></tr>
       <tr><th rowspan="2">국제선</th><td>ICN 출발</td><td><input id="rIntlICN" type="number" value="95"> 분</td></tr>
@@ -502,10 +502,15 @@ function summaryText(M) {
 // ------------------------------------------------------------------ UI
 const $ = id => document.getElementById(id);
 let sources = [], model = null;
-const CFG_KEY = 'showup-cfg-v2';
+const CFG_KEY = 'showup-cfg-v3';
 const RULE_IDS = { domGMP:'rDomGMP', domICN:'rDomICN', domStn:'rDomStn', intlICN:'rIntlICN', intlOther:'rIntlOther' };
-const RULE_DEFAULT = { domGMP:60, domICN:70, domStn:50, intlICN:95, intlOther:80 };
-try { const c = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); if (c) for (const k in RULE_IDS) if (Number.isFinite(c[k])) $(RULE_IDS[k]).value = c[k]; } catch {}
+const RULE_DEFAULT = { domGMP:70, domICN:70, domStn:50, intlICN:95, intlOther:80 };
+try { let c = JSON.parse(localStorage.getItem(CFG_KEY) || 'null');
+  if (!c) {  // migrate v2 settings: GMP default changed 60 -> 70
+    c = JSON.parse(localStorage.getItem('showup-cfg-v2') || 'null');
+    if (c && c.domGMP === 60) c.domGMP = 70;
+  }
+  if (c) for (const k in RULE_IDS) if (Number.isFinite(c[k])) $(RULE_IDS[k]).value = c[k]; } catch {}
 const cfg = () => Object.fromEntries(Object.entries(RULE_IDS).map(([k, id]) => {
   const v = $(id).value.trim(); return [k, v === '' || !Number.isFinite(+v) ? RULE_DEFAULT[k] : +v]; }));
 
