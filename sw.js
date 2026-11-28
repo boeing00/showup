@@ -1,6 +1,6 @@
 // Offline cache: app shell + CDN libraries. Roster PDFs are never cached or sent anywhere.
-const CACHE = 'showup-v9';
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'showup-v10';
+const SHELL = ['./', './index.html', './ocr.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 const CDN = [
   'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
   'https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js',
@@ -26,7 +26,7 @@ self.addEventListener('fetch', e => {
   // only app files are ever cached (never anything else on this origin)
   const scope = new URL(self.registration.scope).pathname;
   const name = url.pathname.startsWith(scope) ? url.pathname.slice(scope.length) : null;
-  const APP = ['', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
+  const APP = ['', 'index.html', 'ocr.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png',
                'icon-maskable-512.png', 'apple-touch-icon.png'];
   if (!isCdn && !APP.includes(name)) return;
   if (isCdn) {  // versioned libraries: cache first

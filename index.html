@@ -28,6 +28,17 @@ body.has-bar .app { padding-bottom:110px; }
 .drop b { color:var(--navy); font-size:15px; }
 .drop .hint { color:var(--mute); font-size:12px; margin-top:4px; }
 .drop input { display:none; }
+.review { margin-top:10px; background:#fff; border-radius:12px; padding:10px 12px; border:1.5px solid #f0c36d; }
+.review .rv-head { display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline; font-size:14px; color:var(--navy); }
+.review .rv-warn { font-size:12px; color:#8a4b00; }
+.review .rv-ym { font-size:13px; color:var(--ink); }
+.review .rv-ym input { width:64px; padding:3px 5px; border:1px solid #cfd6e4; border-radius:6px; font-size:14px; margin:0 2px; }
+.review .rv-ym input#rvMonth { width:46px; }
+.review .rv-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:10px; margin-top:8px; }
+.review img { width:100%; border-radius:6px; border:1px solid #dde3ee; display:block; }
+.review textarea { width:100%; min-height:280px; font:13px/1.45 ui-monospace,Consolas,monospace; border:1px solid #cfd6e4; border-radius:6px; padding:8px; resize:vertical; }
+.review .rv-issues { margin-top:6px; font-size:12px; color:#a12622; white-space:pre-wrap; }
+@media (max-width:600px) { .review .rv-body { grid-template-columns:minmax(0,1fr); } .review textarea { font-size:16px; } }
 .files { margin:8px 0 0; display:flex; flex-wrap:wrap; gap:6px; }
 .chip { background:#fff; border:1px solid #d5dceb; border-radius:14px; padding:3px 10px; font-size:12px; color:var(--mute); }
 .chip.ok { border-color:#9cc59a; color:#2e7d32; }
@@ -137,15 +148,20 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 <div class="app">
   <div class="top">
     <h1>Show Up 스케줄</h1>
-    <p>Fridge View · Crew Roster PDF를 올리면 Show Up을 계산해 월간 스케줄로 정리합니다. 파일은 이 기기 밖으로 나가지 않습니다.</p>
+    <p>로스터 PDF나 스케줄 캡처를 올리면 Show Up을 계산해 월간 스케줄로 정리합니다. 파일은 이 기기 밖으로 나가지 않습니다.</p>
   </div>
 
   <label class="drop" id="drop">
-    <b>PDF 파일 선택 또는 끌어다 놓기</b>
-    <div class="hint">Fridge View + Crew Roster 두 개를 함께 올리면 크루·듀티까지 표시 (하나만 올려도 동작)</div>
-    <input type="file" id="file" accept="application/pdf,.pdf" multiple>
+    <b>PDF 또는 스케줄 사진 선택 · 끌어다 놓기</b>
+    <div class="hint">CWP Fridge View + Crew Roster PDF (크루·듀티까지 표시) · 또는 객실 스케줄 달력 캡처/사진형 PDF (앱이 직접 읽음)</div>
+    <input type="file" id="file" accept="application/pdf,.pdf,image/*" multiple>
   </label>
   <div class="files" id="files"></div>
+  <div class="review" id="review" hidden>
+    <div class="rv-head"><b>사진에서 읽은 일정</b><label class="rv-ym"><input id="rvYear" type="number" min="2000" max="2100">년 <input id="rvMonth" type="number" min="1" max="12">월</label><span class="rv-warn">원본 사진과 시간을 꼭 대조하세요. 아래 글자를 고치면 스케줄에 바로 반영됩니다.</span></div>
+    <div class="rv-body"><a id="rvLink" target="_blank"><img id="rvImg" alt="원본 사진"></a><textarea id="rvText" spellcheck="false" autocapitalize="characters"></textarea></div>
+    <div class="rv-issues" id="rvIssues"></div>
+  </div>
 
   <details class="cfg">
     <summary>Show Up 규칙 설정</summary>
@@ -185,7 +201,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dis
 const TZ = {};
 for (const [tz, aps] of Object.entries({
   'Asia/Seoul':'ICN GMP PUS CJU TAE KWJ CJJ RSU USN KPO MWX YNY WJU HIN KUV',
-  'Asia/Tokyo':'NRT HND KIX ITM UKB FUK NGO CTS OKA KOJ KMJ OIT NGS KIJ AOJ SDJ HIJ OKJ TAK KMQ FSZ MYJ AKJ',
+  'Asia/Tokyo':'NRT HND KIX ITM UKB KMI FUK NGO CTS OKA KOJ KMJ OIT NGS KIJ AOJ SDJ HIJ OKJ TAK KMQ FSZ MYJ AKJ',
   'Asia/Shanghai':'PEK PKX PVG SHA XIY TSN CSX CGQ FOC SHE DLC TAO YNT WEH CAN SZX CKG CTU TFU KMG XMN HGH NKG WUH SYX HRB YNJ DYG TNA CGO KWE NNG HFE LHW URC JMU MDG',
   'Asia/Hong_Kong':'HKG', 'Asia/Macau':'MFM', 'Asia/Taipei':'TPE KHH RMQ TSA',
   'Asia/Ho_Chi_Minh':'SGN HAN DAD CXR PQC HPH', 'Asia/Manila':'MNL CEB CRK KLO', 'Asia/Bangkok':'BKK DMK HKT CNX',
@@ -386,7 +402,7 @@ function buildRows(M) {
         const S = { kind:'FLY', f:p, blk: blockMs(p), su:'', suNote:'', std: HM(p.std), sta:'', staNote:'', duty: p.myDuty,
           showCrew: !p.dh && p.crew.length > 0 && crewKey !== prevCrew };
         if (!p.dh) prevCrew = crewKey;
-        if (p.showup != null) { S.su = HM(p.showup); S.suNote = `STD ${ruleTxt(p.rule.min)}`; }
+        if (p.showup != null) { S.su = HM(p.showup); S.suNote = `STD ${ruleTxt(p.rule.min)}`; const sd = dayDiff(p.std, p.showup); if (sd) S.suNote = `${MD(p.showup)} 전날 · ${S.suNote}`; }
         if (p.sta != null) { S.sta = HM(p.sta); const dd = dayDiff(p.std, p.sta); if (dd) S.staNote = `${MD(p.sta)} (${dd > 0 ? '+' : ''}${dd})`; }
         R.subs.push(S);
       } else if (k === 'ARR') {
@@ -480,7 +496,7 @@ function summaryText(M) {
     for (const S of R.subs) {
       if (S.kind === 'FLY') {
         const dd = S.f.sta != null ? dayDiff(S.f.std, S.f.sta) : 0;
-        parts.push(`${S.f.no} ${S.f.dep}→${S.f.arr}${S.su ? ` SHOW UP ${S.su} /` : ''} STD ${S.std}`
+        parts.push(`${S.f.no} ${S.f.dep}→${S.f.arr}${S.su ? ` SHOW UP ${S.su}${dayDiff(S.f.std, S.f.showup) ? '(전날)' : ''} /` : ''} STD ${S.std}`
           + (S.sta ? ` / STA ${S.sta}${dd ? `(${dd > 0 ? '+' : ''}${dd})` : ''}` : '') + (S.duty ? ` [${S.duty}]` : ''));
       } else for (const it of S.items) {
         if (it.t === 'ARR') parts.push(`${it.f.no} ${it.f.arr} 도착 ${HM(it.f.sta)}`);
@@ -533,32 +549,119 @@ function render() {
     model = buildModel(sources, c);
     $('sheet').innerHTML = renderSheet(model);
     $('stage').classList.add('on'); $('bar').classList.add('on'); document.body.classList.add('has-bar');
-    msg(model.flights.some(f => !f.crew.length) && sources.length < 2
+    if (!sources.some(s => s.photo)) msg(model.flights.some(f => !f.crew.length) && sources.length < 2
       ? 'Crew Roster PDF도 함께 올리면 크루 명단과 DUTY가 표시됩니다.' : '', 'info');
     fit();
   } catch (e) { console.error(e); msg(e.message, 'err'); $('stage').classList.remove('on'); $('bar').classList.remove('on'); document.body.classList.remove('has-bar'); }
 }
 
+function showChips() {
+  $('files').innerHTML = sources.map(s => `<span class="chip ok">${s.photo ? '사진 인식' : s.kind === 'fridge' ? 'Fridge View' : 'Crew Roster'} · ${esc(s.name)}</span>`).join('');
+}
 async function addFiles(list) {
-  msg('PDF 읽는 중…', 'info');
+  msg('파일 읽는 중…', 'info');
+  const photos = [], photoNames = [];
   for (const f of list) {
     try {
+      if (isImage(f)) { photos.push(f); photoNames.push(f.name); continue; }
       const lines = await pdfLines(f);
+      if (!isFridge(lines) && !parseRoster(lines).flights.length) {   // no readable text: a picture saved as PDF
+        photos.push(...await pdfToImages(f)); photoNames.push(f.name); continue;
+      }
       const kind = isFridge(lines) ? 'fridge' : 'roster';
       sources = sources.filter(s => s.kind !== kind);
       sources.push({ name: f.name, kind, lines });
-    } catch (e) { console.error(e); msg(`${f.name}: PDF를 읽지 못했습니다 (${e.message})`, 'err'); return; }
+    } catch (e) { console.error(e); msg(`${f.name}: 파일을 읽지 못했습니다 (${e.message})`, 'err'); return; }
   }
-  $('files').innerHTML = sources.map(s => `<span class="chip ok">${s.kind === 'fridge' ? 'Fridge View' : 'Crew Roster'} · ${esc(s.name)}</span>`).join('');
+  if (photos.length) { await recognizePhotos(photos, photoNames.join(', ')); return; }
+  showChips();
   render();
 }
 $('file').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value = ''; });
 const drop = $('drop');
 ['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files].filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name))));
+drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files].filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name) || isImage(f))));
 Object.values(RULE_IDS).forEach(id => $(id).addEventListener('input', render));
 $('rDefault').onclick = () => { for (const k in RULE_IDS) $(RULE_IDS[k]).value = RULE_DEFAULT[k]; render(); toast('기본값(FOM 2.2.9.2)으로 되돌렸습니다'); };
+
+// ------------------------------------------------------------------ photo recognition (on-device OCR, ocr.js)
+const isImage = f => /^image\//.test(f.type || '') || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || '');
+async function pdfToImages(file) {
+  const doc = await pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+  const out = [];
+  for (let i = 1; i <= Math.min(doc.numPages, 3); i++) {
+    const pg = await doc.getPage(i);
+    const base = pg.getViewport({ scale: 1 }), vp = pg.getViewport({ scale: Math.min(4, 1200 / base.width * 1.0) });
+    const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+    const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+    await pg.render({ canvasContext: g, viewport: vp, background: 'rgb(255,255,255)' }).promise;
+    out.push(await new Promise(r => cv.toBlob(r, 'image/png')));
+  }
+  return out;
+}
+let photo = null;   // { res, year, month, url, name }
+function hideReview() {
+  $('review').hidden = true;
+  if (photo?.url) URL.revokeObjectURL(photo.url);
+  photo = null;
+}
+const PHOTO_HDR = 2;   // month line + title line, then the editable part, then the trailing marker
+function photoSourceLines(body) {
+  return [`${MONTHS[photo.month - 1]} ${photo.year}`, '사진 인식 |', ...body.split('\n').map(l => l.trim()).filter(Boolean), 'ALL TIMINGS ARE IN SLT.'];
+}
+function applyPhotoText() {
+  if (!photo) return;
+  const src = sources.find(s => s.photo);
+  if (src) src.lines = photoSourceLines($('rvText').value);
+  render();
+}
+function showIssues(issues) {
+  $('rvIssues').textContent = issues.length
+    ? `확인 필요 ${issues.length}건 (사진과 대조):\n` + issues.map(x => `· ${photo.month}/${x.day}  ${x.line}  — ${x.why}`).join('\n')
+    : '자동 확인에서 걸린 항목은 없습니다. 그래도 시간은 원본과 한 번 대조하세요.';
+}
+function rebuildFromPhoto() {
+  const { lines, issues } = cellsToLinesRef(photo.res, photo.year, photo.month);
+  $('rvText').value = lines.join('\n');
+  showIssues(issues);
+  sources = sources.filter(s => s.kind !== 'fridge');
+  sources.push({ name: photo.name, kind: 'fridge', photo: true, lines: photoSourceLines(lines.join('\n')) });
+  showChips();
+  render();
+}
+let cellsToLinesRef = null;
+async function recognizePhotos(blobs, name) {
+  const btns = [...document.querySelectorAll('.bar .btn')];
+  try {
+    msg('사진 인식 준비 중… (처음 한 번은 인식 엔진을 내려받느라 10초쯤 걸립니다)', 'info');
+    const ocr = await import('./ocr.js');
+    cellsToLinesRef = ocr.cellsToLines;
+    ocr.setKnownAirports(Object.keys(TZ));
+    const res = await ocr.recognizeCalendar(blobs[0], t => msg(`사진 인식 중 · ${t}`, 'info'));
+    const now = new Date();
+    const year = res.year || now.getFullYear(), month = (res.month >= 1 && res.month <= 12) ? res.month : now.getMonth() + 1;
+    hideReview();
+    photo = { res, year, month, name, url: URL.createObjectURL(blobs[0]) };
+    $('rvImg').src = photo.url; $('rvLink').href = photo.url;
+    $('rvYear').value = year; $('rvMonth').value = month;
+    $('review').hidden = false;
+    msg(res.year ? '' : '사진에서 연·월을 못 읽었습니다. 확인 창에서 연·월을 맞춰 주세요.', res.year ? '' : 'err');
+    rebuildFromPhoto();
+    $('review').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    console.error(e);
+    msg(`사진을 읽지 못했습니다: ${e.message}. 스케줄 달력 전체가 보이게 다시 캡처해 주세요.`, 'err');
+  } finally { btns.forEach(b => (b.disabled = false)); }
+}
+let rvTimer = 0;
+$('rvText').addEventListener('input', () => { clearTimeout(rvTimer); rvTimer = setTimeout(applyPhotoText, 350); });
+const onYM = () => {
+  if (!photo) return;
+  const y = +$('rvYear').value, m = +$('rvMonth').value;
+  if (y >= 2000 && y <= 2100 && m >= 1 && m <= 12) { photo.year = y; photo.month = m; rebuildFromPhoto(); }
+};
+$('rvYear').addEventListener('change', onYM); $('rvMonth').addEventListener('change', onYM);
 
 // ------------------------------------------------------------------ export
 const baseName = () => `schedule_${model.ym[0]}${p2(model.ym[1])}`;
@@ -635,7 +738,7 @@ $('bImg').onclick = e => busy(e.currentTarget, async () => shareFile(await pngBl
   a.textContent = addr; a.href = 'mailto:' + addr + '?subject=' + encodeURIComponent('[Show Up 스케줄] 문의');
 }
 $('bReset').onclick = () => {
-  sources = []; model = null;
+  sources = []; model = null; hideReview();
   $('file').value = ''; $('files').innerHTML = ''; $('sheet').innerHTML = '';
   $('stage').classList.remove('on'); $('stage').style.height = ''; $('bar').classList.remove('on'); document.body.classList.remove('has-bar');
   msg('', '');
