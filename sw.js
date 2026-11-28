@@ -1,5 +1,5 @@
 // Offline cache: app shell + CDN libraries. Roster PDFs are never cached or sent anywhere.
-const CACHE = 'showup-v13';
+const CACHE = 'showup-v14';
 const SHELL = ['./', './index.html', './ocr.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 const CDN = [
   'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js',
