@@ -93,6 +93,7 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 .cfg .rules th, .cfg .rules td { border:1px solid #dde3ee; padding:5px 8px; text-align:left; }
 .cfg .rules th { background:#f2f5fb; color:var(--navy); }
 .btn.small { margin-top:8px; padding:6px 10px; font-size:12px; }
+.cfg-btns { display:flex; gap:8px; } .cfg-btns .btn.primary { min-width:72px; }
 .cfg input { width:64px; padding:5px 6px; border:1px solid #cfd6e4; border-radius:6px; font-size:13px; }
 .msg { margin:10px 0; padding:10px 12px; border-radius:8px; font-size:13px; display:none; }
 .msg.err { display:block; background:#fdecea; color:#a12622; }
@@ -247,7 +248,7 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
       <tr><td>ICN 외 모든 공항</td><td><input id="cIntlOther" type="number" value="80"> 분</td></tr>
       <tr><th>선택</th><td>Ship Side 쇼업</td><td><input id="cShip" type="number" value="80"> 분</td></tr>
     </table>
-    <button type="button" class="btn small" id="rDefault">기본값으로</button>
+    <div class="cfg-btns"><button type="button" class="btn small" id="rDefault">기본값으로</button><button type="button" class="btn small primary" id="rApply">확인</button></div>
   </details>
 
   <div class="msg" id="msg"></div>
@@ -677,6 +678,11 @@ for (const [role, inId, dropId] of [['pilot', 'filePilot', 'dropPilot'], ['cabin
   dz.addEventListener('drop', e => addFiles([...e.dataTransfer.files].filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name) || isImage(f)), role));
 }
 [...Object.values(RULE_IDS), ...Object.values(CAB_IDS)].forEach(id => $(id).addEventListener('input', render));
+$('rApply').onclick = () => {                     // apply + save, then fold the settings away
+  saveCfg(); render();
+  document.querySelector('details.cfg').open = false;
+  toast('Show Up 규칙을 저장했습니다');
+};
 $('rDefault').onclick = () => {
   for (const k in RULE_IDS) $(RULE_IDS[k]).value = RULE_DEFAULT[k];
   for (const k in CAB_IDS) $(CAB_IDS[k]).value = CAB_DEFAULT[k];
