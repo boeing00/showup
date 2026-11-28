@@ -185,6 +185,17 @@ function fixFlightNo(s) {
 }
 
 // ---------------------------------------------------------------- main
+const WL_CODE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
+const WL_DETAIL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:- ';
+const FIRST = { S: 4, blur: 1 };                              // first (often only) reading
+const EXTRA = [{ S: 3, blur: 0.6 }, { S: 5, blur: 1 }];       // extra readings when the first is doubtful
+const cleanDetail = t => t.toUpperCase().replace(/\s+/g, ' ').trim();
+const codeLooksRight = t => /^[A-Z]{2}\d{3,4}[A-Z]?$/.test(t) || KNOWN_CODES.includes(t);
+function detailLooksRight(t) {
+  const d = parseDetail(t);
+  return d.apts.length >= 1 && d.colons === d.times.length && !/[^A-Z0-9:\- ]/.test(t);
+}
+
 export async function recognizeCalendar(imageBlob, onProgress = () => {}) {
   const img = await createImageBitmap(imageBlob);
   const cv = toCanvas(img), P = pixels(cv);
@@ -192,26 +203,31 @@ export async function recognizeCalendar(imageBlob, onProgress = () => {}) {
   const L = findLayout(P);
   const T = await loadTesseract();
   onProgress('OCR 엔진 준비 중…');
-  const worker = await T.createWorker('eng');
-  const read = async (canvas, whitelist) => {
-    await worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: whitelist, preserve_interword_spaces: '1' });
-    const { data } = await worker.recognize(canvas);
-    return { text: data.text.trim(), conf: data.confidence };
-  };
-  // read the same crop at three magnifications and take the majority answer
-  const VARIANTS = [{ S: 3, blur: 0.6 }, { S: 4, blur: 1 }, { S: 5, blur: 1 }];
-  const vote = async (mk, wl, clean, key = t => t) => {
-    const got = [];
-    for (const o of VARIANTS) { const r = await read(mk(o), wl); got.push({ text: clean(r.text), conf: r.conf }); }
-    const tally = new Map();
-    for (const g of got) { const k = key(g.text); const t = tally.get(k) || { n: 0, conf: 0, g }; t.n++; t.conf += g.conf; if (g.conf > t.g.conf) t.g = g; tally.set(k, t); }
-    const best = [...tally.values()].sort((a, b) => b.n - a.n || b.conf - a.conf)[0];
-    return { text: best.g.text, conf: best.conf / best.n, agree: best.n };
+  // a small pool of workers: phones have several cores, each read is independent
+  const cores = navigator.hardwareConcurrency || 2, mem = navigator.deviceMemory || 4;
+  const nWorkers = Math.max(1, Math.min(mem >= 4 && cores >= 6 ? 3 : 2, cores - 1));
+  const workers = await Promise.all(Array.from({ length: nWorkers }, () => T.createWorker('eng')));
+  const wl = new Map();                                          // current whitelist per worker
+  const runAll = async (jobs, whitelist, label) => {             // jobs: [{ canvas, done(result) }]
+    let next = 0, finished = 0;
+    await Promise.all(workers.map(async w => {
+      if (wl.get(w) !== whitelist) {
+        await w.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: whitelist, preserve_interword_spaces: '1' });
+        wl.set(w, whitelist);
+      }
+      while (next < jobs.length) {
+        const job = jobs[next++];
+        const { data } = await w.recognize(job.canvas());
+        job.done({ text: data.text.trim(), conf: data.confidence });
+        if (label) onProgress(`${label} ${++finished}/${jobs.length}`);
+      }
+    }));
   };
   try {
     // title "2026.12" just above the rule, left side
     const tTop = Math.max(0, L.rule.y - Math.round(L.colW * 0.32));
-    const title = await read(crop(P, L.x0, tTop, Math.round(L.x0 + L.colW * 1.4), L.rule.y - 3), '0123456789.');
+    let title = { text: '' };
+    await runAll([{ canvas: () => crop(P, L.x0, tTop, Math.round(L.x0 + L.colW * 1.4), L.rule.y - 3), done: r => (title = r) }], '0123456789.');
     const tm = title.text.replace(/\s/g, '').match(/(20\d\d)\.?(\d{1,2})/);
     const year = tm ? +tm[1] : null, month = tm && +tm[2] >= 1 && +tm[2] <= 12 ? +tm[2] : null;
     if (year && month) {
@@ -221,26 +237,46 @@ export async function recognizeCalendar(imageBlob, onProgress = () => {}) {
       if (!rows) throw new Error(`달력 ${nRows}주 칸을 정확히 찾지 못했습니다`);
       L.rows = rows;
     } else if (L.rows.length < 4 || L.rows.length > 6) throw new Error('달력 칸(주 단위 줄)을 찾지 못했습니다');
+
     const cells = [];
     for (let r = 0; r < L.rows.length; r++) for (let c = 0; c < 7; c++) cells.push({ r, c, bars: findBars(P, L, r, c) });
-    const total = cells.reduce((n, x) => n + x.bars.length, 0);
-    let done = 0;
-    for (const cell of cells) {
-      for (const b of cell.bars) {
-        onProgress(`글자 읽는 중… ${++done}/${total}`);
-        const codeR = await vote(o => crop(P, b.x0 + 2, b.y0, b.x1 - 2, b.y1 + 1, o), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_', cleanCode);
-        b.code = codeR.text; b.codeConf = codeR.conf; b.codeAgree = codeR.agree;
-        // detail line: the bordered box right under the bar
-        const dh = Math.round((b.y1 - b.y0 + 1) * 1.55);
-        const next = cell.bars.find(o => o.y0 > b.y1);
-        const dy1 = Math.min(L.rows[cell.r].bot, next ? next.y0 - 2 : b.y1 + dh + 2, b.y1 + dh + 2);
-        const detR = await vote(o => crop(P, b.x0 + 3, b.y1 + 2, b.x1 - 3, dy1, o), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:- ',
-          t => t.toUpperCase().replace(/\s+/g, ' ').trim(), t => t.replace(/\s+/g, ''));
-        b.detail = detR.text; b.detailConf = detR.conf; b.detailAgree = detR.agree;
-      }
+    const bars = [];
+    for (const cell of cells) for (const b of cell.bars) {
+      const dh = Math.round((b.y1 - b.y0 + 1) * 1.55);
+      const next = cell.bars.find(o => o.y0 > b.y1);
+      const dy1 = Math.min(L.rows[cell.r].bot, next ? next.y0 - 2 : b.y1 + dh + 2, b.y1 + dh + 2);
+      b.codeBox = o => crop(P, b.x0 + 2, b.y0, b.x1 - 2, b.y1 + 1, o);
+      b.detailBox = o => crop(P, b.x0 + 3, b.y1 + 2, b.x1 - 3, dy1, o);
+      b.codeReads = []; b.detailReads = [];
+      bars.push(b);
     }
-    return { year, month, titleRaw: title.text, layout: { rows: L.rows, lines: L.lines, colW: Math.round(L.colW), ruleY: L.rule.y }, cells };
-  } finally { await worker.terminate(); }
+    const codeBars = bars.filter(b => b.kind !== 'light');       // a sky-blue bar is always LO: no need to read it
+    // 1st pass: one reading of everything
+    await runAll(codeBars.map(b => ({ canvas: () => b.codeBox(FIRST), done: r => b.codeReads.push({ text: cleanCode(r.text), conf: r.conf }) })), WL_CODE, '편명·코드 읽는 중…');
+    await runAll(bars.map(b => ({ canvas: () => b.detailBox(FIRST), done: r => b.detailReads.push({ text: cleanDetail(r.text), conf: r.conf }) })), WL_DETAIL, '시간 읽는 중…');
+    // 2nd pass: only doubtful ones get two more readings for a majority vote
+    // doubtful = wrong shape, or right shape but low confidence (thresholds tuned on the test calendars)
+    const doubtCode = codeBars.filter(b => { const r = b.codeReads[0]; return !codeLooksRight(r.text) || r.conf < 60; });
+    const doubtDet = bars.filter(b => { const r = b.detailReads[0]; return !detailLooksRight(r.text) || r.conf < 85; });
+    if (doubtCode.length) await runAll(doubtCode.flatMap(b => EXTRA.map(o => ({ canvas: () => b.codeBox(o), done: r => b.codeReads.push({ text: cleanCode(r.text), conf: r.conf }) }))), WL_CODE, '애매한 글자 다시 읽는 중…');
+    if (doubtDet.length) await runAll(doubtDet.flatMap(b => EXTRA.map(o => ({ canvas: () => b.detailBox(o), done: r => b.detailReads.push({ text: cleanDetail(r.text), conf: r.conf }) }))), WL_DETAIL, '애매한 시간 다시 읽는 중…');
+    const decide = (reads, key = t => t) => {
+      if (reads.length === 1) return { text: reads[0].text, conf: reads[0].conf, agree: 3 };   // confident single read
+      const tally = new Map();
+      for (const g of reads) { const k = key(g.text); const t = tally.get(k) || { n: 0, conf: 0, g }; t.n++; t.conf += g.conf; if (g.conf > t.g.conf) t.g = g; tally.set(k, t); }
+      const best = [...tally.values()].sort((a, b) => b.n - a.n || b.conf - a.conf)[0];
+      return { text: best.g.text, conf: best.conf / best.n, agree: best.n };
+    };
+    for (const b of bars) {
+      if (b.kind === 'light') { b.code = 'LO'; b.codeConf = 99; b.codeAgree = 3; }
+      else { const c = decide(b.codeReads); b.code = c.text; b.codeConf = c.conf; b.codeAgree = c.agree; }
+      const d = decide(b.detailReads, t => t.replace(/\s+/g, ''));
+      b.detail = d.text; b.detailConf = d.conf; b.detailAgree = d.agree;
+      delete b.codeBox; delete b.detailBox; delete b.codeReads; delete b.detailReads;
+    }
+    return { year, month, titleRaw: title.text, reads: { first: codeBars.length + bars.length, extra: 2 * (doubtCode.length + doubtDet.length) },
+      layout: { rows: L.rows, lines: L.lines, colW: Math.round(L.colW), ruleY: L.rule.y }, cells };
+  } finally { await Promise.all(workers.map(w => w.terminate())); }
 }
 
 // ---------------------------------------------------------------- correction rules
@@ -281,8 +317,18 @@ function flightCandidates(raw) {
 }
 const fnum = f => { const m = f.match(/^[A-Z]{2}0*(\d+)([A-Z]?)$/); return m ? { n: +m[1], s: m[2] } : null; };
 
-let KNOWN_APTS = null;
+let KNOWN_APTS = null, ZONES = null;
 export function setKnownAirports(list) { KNOWN_APTS = new Set(list); }
+export function setAirportZones(map) { ZONES = map; KNOWN_APTS = new Set(Object.keys(map)); }
+const offCache = {};
+function utcOffsetMin(ap, y, mo) {                       // airport UTC offset (minutes) in the given month
+  const tz = ZONES?.[ap]; if (!tz) return null;
+  const k = `${tz}|${y}|${mo}`; if (k in offCache) return offCache[k];
+  const t = Date.UTC(y, mo - 1, 15, 12);
+  const f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  const o = {}; for (const x of f.formatToParts(new Date(t))) o[x.type] = x.value;
+  return (offCache[k] = (Date.UTC(+o.year, +o.month - 1, +o.day, +o.hour % 24, +o.minute) - t) / 60000);
+}
 
 // cells -> Fridge-View-style lines (+ list of things a person must check)
 export function cellsToLines(res, year, month) {
@@ -366,6 +412,28 @@ export function cellsToLines(res, year, month) {
     if (it.type === 'LO' && !d.apts.length) it.flags.push('공항 못 읽음');
     if (it.flags.length) issues.push({ day: it.day, line, why: it.flags.join(', ') });
     (byDay[it.day] ||= []).push(line);
+  }
+  // outbound A->B and the following return B->A should take a similar time in the air
+  if (ZONES) {
+    const mins = t => +t.slice(0, 2) * 60 + +t.slice(3);
+    const blk = f => {
+      const [dep, arr] = f.d.apts, o1 = utcOffsetMin(dep, year, month), o2 = utcOffsetMin(arr, year, month);
+      if (f.d.times.length < 2 || o1 == null || o2 == null) return null;
+      return ((mins(f.d.times[1]) - o2) - (mins(f.d.times[0]) - o1) + 2880) % 1440;
+    };
+    flts.forEach((f, k) => {
+      const g = flts[k + 1];
+      if (!g || g.day - f.day > 1 || f.d.apts[0] !== g.d.apts[1] || f.d.apts[1] !== g.d.apts[0]) return;
+      const a = blk(f), b = blk(g);
+      if (a == null || b == null) return;
+      if (Math.abs(a - b) > Math.max(60, 0.35 * Math.min(a, b))) {
+        for (const x of [f, g]) {
+          const line = issues.find(i => i.day === x.day && i.line.startsWith(x.no));
+          if (line) { if (!line.why.includes('왕복')) line.why += ', 왕복 비행시간 차이 큼'; }
+          else issues.push({ day: x.day, line: (byDay[x.day] || []).find(l => l.startsWith(x.no)) || x.no, why: '시간 확인 (왕복 비행시간 차이 큼)' });
+        }
+      }
+    });
   }
   const lines = [];
   for (let d = 1; d <= nDays; d++) if (byDay[d]) { lines.push(`${MON3[month - 1]} ${p2(d)}`); lines.push(...byDay[d]); }

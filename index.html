@@ -653,7 +653,7 @@ async function recognizePhotos(blobs, name) {
     msg('사진 인식 준비 중… (처음 한 번은 인식 엔진(약 10MB)을 내려받느라 20초~1분 걸립니다. 화면을 닫지 마세요)', 'info');
     const ocr = await import('./ocr.js');
     cellsToLinesRef = ocr.cellsToLines;
-    ocr.setKnownAirports(Object.keys(TZ));
+    ocr.setAirportZones(TZ);
     const res = await ocr.recognizeCalendar(blobs[0], t => msg(`사진 인식 중 · ${t}`, 'info'));
     const now = new Date();
     const year = res.year || now.getFullYear(), month = (res.month >= 1 && res.month <= 12) ? res.month : now.getMonth() + 1;
