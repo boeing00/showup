@@ -26,6 +26,7 @@ body.has-bar .app { padding-bottom:110px; }
   border-radius:10px; padding:10px 12px; margin:0 0 12px; font-size:13px; line-height:1.5; color:#5a3200; }
 .caution > b { white-space:nowrap; color:#b35900; }
 .caution u { text-decoration-color:#e07b00; }
+.caution .first-run { display:inline-block; margin-top:6px; padding-top:6px; border-top:1px dashed #f0c38a; color:#6b4a1f; }
 @media (max-width:600px) { .caution { flex-direction:column; gap:2px; } }
 .sheet .photo-warn { margin:0 0 7px; padding:5px 9px; border-radius:6px; background:#fff4e5; border:1px solid #f0a54a;
   color:#8a4b00; font-size:8.5pt; font-weight:700; }
@@ -161,7 +162,8 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
     <b>⚠ 객실승무원 주의</b>
     <span>객실 스케줄(포털 캡처·사진형 PDF)은 앱이 <u>사진에서 글자를 읽어</u> 만들기 때문에 <b>편명·시간을 잘못 읽을 수 있습니다.</b>
     결과의 <b>편명·STD·STA·Show Up을 반드시 원본 스케줄과 대조</b>한 뒤 사용하세요.
-    운항승무원 CWP 로스터 PDF는 글자를 그대로 읽으므로 이 문제가 없습니다.</span>
+    운항승무원 CWP 로스터 PDF는 글자를 그대로 읽으므로 이 문제가 없습니다.
+    <br><span class="first-run">⏱ 사진 인식을 <b>처음 쓸 때</b>는 인식 엔진(약 10MB)을 내려받느라 <b>20초~1분</b> 걸립니다. 와이파이에서 한 번 실행해 두면 그다음부터는 한 장에 10초 안팎입니다.</span></span>
   </div>
 
   <label class="drop" id="drop">
@@ -648,7 +650,7 @@ let cellsToLinesRef = null;
 async function recognizePhotos(blobs, name) {
   const btns = [...document.querySelectorAll('.bar .btn')];
   try {
-    msg('사진 인식 준비 중… (처음 한 번은 인식 엔진을 내려받느라 10초쯤 걸립니다)', 'info');
+    msg('사진 인식 준비 중… (처음 한 번은 인식 엔진(약 10MB)을 내려받느라 20초~1분 걸립니다. 화면을 닫지 마세요)', 'info');
     const ocr = await import('./ocr.js');
     cellsToLinesRef = ocr.cellsToLines;
     ocr.setKnownAirports(Object.keys(TZ));
