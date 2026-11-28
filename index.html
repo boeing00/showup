@@ -22,6 +22,13 @@ body { margin:0; background:var(--bg); color:var(--ink);
 body.has-bar .app { padding-bottom:110px; }
 .top h1 { margin:4px 0 2px; font-size:20px; color:var(--navy); }
 .top p { margin:0 0 12px; color:var(--mute); font-size:13px; }
+.caution { display:flex; gap:10px; align-items:flex-start; background:#fff4e5; border:1.5px solid #f0a54a; border-left:6px solid #e07b00;
+  border-radius:10px; padding:10px 12px; margin:0 0 12px; font-size:13px; line-height:1.5; color:#5a3200; }
+.caution > b { white-space:nowrap; color:#b35900; }
+.caution u { text-decoration-color:#e07b00; }
+@media (max-width:600px) { .caution { flex-direction:column; gap:2px; } }
+.sheet .photo-warn { margin:0 0 7px; padding:5px 9px; border-radius:6px; background:#fff4e5; border:1px solid #f0a54a;
+  color:#8a4b00; font-size:8.5pt; font-weight:700; }
 .drop { display:block; border:2px dashed #9fb2d6; border-radius:12px; background:#fff; padding:18px 14px;
   text-align:center; cursor:pointer; transition:.15s; }
 .drop.over { border-color:var(--navy); background:#f4f7fd; }
@@ -149,6 +156,12 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
   <div class="top">
     <h1>Show Up 스케줄</h1>
     <p>로스터 PDF나 스케줄 캡처를 올리면 Show Up을 계산해 월간 스케줄로 정리합니다. 파일은 이 기기 밖으로 나가지 않습니다.</p>
+  </div>
+  <div class="caution" role="note">
+    <b>⚠ 객실승무원 주의</b>
+    <span>객실 스케줄(포털 캡처·사진형 PDF)은 앱이 <u>사진에서 글자를 읽어</u> 만들기 때문에 <b>편명·시간을 잘못 읽을 수 있습니다.</b>
+    결과의 <b>편명·STD·STA·Show Up을 반드시 원본 스케줄과 대조</b>한 뒤 사용하세요.
+    운항승무원 CWP 로스터 PDF는 글자를 그대로 읽으므로 이 문제가 없습니다.</span>
   </div>
 
   <label class="drop" id="drop">
@@ -376,7 +389,7 @@ function buildModel(sources, cfg) {
     f.showup = f.newDuty ? f.std - 60000 * f.rule.min : null;
     prevArr = arrU(f);
   }
-  return { header, ym, days, flights, me, cfg };
+  return { header, ym, days, flights, me, cfg, fromPhoto: sources.some(s => s.photo) };
 }
 
 // Each day -> sub-rows: one per departing flight, plus one for other items (layover, standby, off…)
@@ -478,6 +491,7 @@ function renderSheet(M) {
   const now = new Date();
   return `<div class="hdr"><div><h2>${year}년 ${month}월 스케줄</h2><div class="sub">${esc(name)}${meta ? ' · ' + esc(meta) : ''}</div></div>
     <div class="right">Show Up 계산 포함 · 모든 시간 현지시각(SLT)<br>${esc(rstats)}</div></div>
+    ${M.fromPhoto ? '<div class="photo-warn">⚠ 사진 인식으로 만든 스케줄입니다 — 편명·시간·Show Up을 원본 스케줄과 반드시 대조하세요.</div>' : ''}
     <div class="stats">${cards.map(([k, v, c]) => `<div class="stat"><span>${k}</span><b style="color:${c}">${v}</b></div>`).join('')}</div>
     <table><thead><tr><th>날짜</th><th>구분</th><th class="c su">SHOW UP</th><th class="c">STD</th><th class="c">STA</th><th class="c">DUTY</th><th>내용</th></tr></thead>
     <tbody>${body}</tbody></table>
@@ -489,7 +503,7 @@ function renderSheet(M) {
 function summaryText(M) {
   const { rows } = buildRows(M), [year, month] = M.ym;
   const name = (M.header.title.split('|')[0] || '').trim();
-  const out = [`[${year}년 ${month}월 스케줄]${name ? ' ' + name : ''}`, ''];
+  const out = [`[${year}년 ${month}월 스케줄]${name ? ' ' + name : ''}`, ...(M.fromPhoto ? ['※ 사진 인식 결과 — 편명·시간·Show Up을 원본과 반드시 대조하세요.'] : []), ''];
   for (const R of rows) {
     const d = `${p2(month)}/${p2(R.dn)}(${DOW[R.wd]})`;
     const parts = [];
