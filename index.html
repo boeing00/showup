@@ -35,6 +35,11 @@ details.cfg { margin:10px 0; background:#fff; border-radius:10px; padding:8px 12
 details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 .cfg .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; align-items:center; }
 .cfg label { display:flex; gap:6px; align-items:center; }
+.cfg .hint2 { margin-top:8px; color:var(--mute); font-size:12px; }
+.cfg table.rules { border-collapse:collapse; margin-top:6px; font-size:13px; }
+.cfg .rules th, .cfg .rules td { border:1px solid #dde3ee; padding:5px 8px; text-align:left; }
+.cfg .rules th { background:#f2f5fb; color:var(--navy); }
+.btn.small { margin-top:8px; padding:6px 10px; font-size:12px; }
 .cfg input { width:64px; padding:5px 6px; border:1px solid #cfd6e4; border-radius:6px; font-size:13px; }
 .msg { margin:10px 0; padding:10px 12px; border-radius:8px; font-size:13px; display:none; }
 .msg.err { display:block; background:#fdecea; color:#a12622; }
@@ -141,11 +146,15 @@ details.cfg summary { cursor:pointer; color:var(--navy); font-weight:600; }
 
   <details class="cfg">
     <summary>Show Up 규칙 설정</summary>
-    <div class="row">
-      <label>베이스 <input id="cBase" value="ICN" maxlength="3"></label>
-      <label>베이스 출발 STD − <input id="cBaseMin" type="number" value="95"> 분</label>
-      <label>해외 출발 STD − <input id="cOutMin" type="number" value="80"> 분</label>
-    </div>
+    <div class="hint2">FOM 2.2.9.2 Show Up Time for Flight Crew 기준 (STD 전, 분)</div>
+    <table class="rules">
+      <tr><th rowspan="3">국내선</th><td>GMP 출발</td><td><input id="rDomGMP" type="number" value="60"> 분</td></tr>
+      <tr><td>ICN 출발</td><td><input id="rDomICN" type="number" value="70"> 분</td></tr>
+      <tr><td>그 외 국내 공항</td><td><input id="rDomStn" type="number" value="50"> 분</td></tr>
+      <tr><th rowspan="2">국제선</th><td>ICN 출발</td><td><input id="rIntlICN" type="number" value="95"> 분</td></tr>
+      <tr><td>ICN 외 모든 공항</td><td><input id="rIntlOther" type="number" value="80"> 분</td></tr>
+    </table>
+    <button type="button" class="btn small" id="rDefault">기본값으로</button>
   </details>
 
   <div class="msg" id="msg"></div>
@@ -170,7 +179,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dis
 
 // ------------------------------------------------------------------ constants
 const TZ = {
-  ICN:'Asia/Seoul',GMP:'Asia/Seoul',PUS:'Asia/Seoul',CJU:'Asia/Seoul',
+  ICN:'Asia/Seoul',GMP:'Asia/Seoul',PUS:'Asia/Seoul',CJU:'Asia/Seoul',TAE:'Asia/Seoul',KWJ:'Asia/Seoul',CJJ:'Asia/Seoul',
+  RSU:'Asia/Seoul',USN:'Asia/Seoul',KPO:'Asia/Seoul',MWX:'Asia/Seoul',YNY:'Asia/Seoul',WJU:'Asia/Seoul',HIN:'Asia/Seoul',KUV:'Asia/Seoul',
   LAX:'America/Los_Angeles',SFO:'America/Los_Angeles',SEA:'America/Los_Angeles',LAS:'America/Los_Angeles',
   JFK:'America/New_York',IAD:'America/New_York',BOS:'America/New_York',ATL:'America/New_York',
   ORD:'America/Chicago',DFW:'America/Chicago',YVR:'America/Vancouver',YYZ:'America/Toronto',
@@ -182,6 +192,14 @@ const TZ = {
   FCO:'Europe/Rome',MAD:'Europe/Madrid',AMS:'Europe/Amsterdam',IST:'Europe/Istanbul',
   PRG:'Europe/Prague',ZRH:'Europe/Zurich',
 };
+// Korean airports: a flight is domestic when both ends are in this set
+const KR = new Set(['ICN','GMP','PUS','CJU','TAE','KWJ','CJJ','RSU','USN','KPO','MWX','YNY','WJU','HIN','KUV']);
+// FOM 2.2.9.2 Show Up Time for Flight Crew (minutes before STD/ETD)
+function showupRule(f, c) {
+  const dom = KR.has(f.dep) && KR.has(f.arr);
+  if (dom) return f.dep === 'GMP' ? { min:c.domGMP, label:'국내 GMP' } : f.dep === 'ICN' ? { min:c.domICN, label:'국내 ICN' } : { min:c.domStn, label:'국내 지방' };
+  return f.dep === 'ICN' ? { min:c.intlICN, label:'국제 ICN' } : { min:c.intlOther, label:'국제' };
+}
 const FLT_RE = /^[A-Z0-9]{2}\d{1,4}[A-Z]?$/, APT_RE = /^[A-Z]{3}$/, DT_RE = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/;
 const RANKS = new Set(['CAP','FO','SO','CP','FE','INS']);
 const OFF_CODES = new Set(['DO','T_DO','ATDO','AL','VAC','OFF','LV','ALV']);
@@ -301,7 +319,7 @@ function buildModel(sources, cfg) {
       if (f.sta != null) (days[dayKey(f.sta)] ||= []).push(['ARR', f]);
     }
   } else throw new Error('일정을 찾지 못했습니다. CWP Fridge View 또는 Crew Roster PDF인지 확인해 주세요.');
-  for (const f of flights) f.showup = f.std - 60000 * (f.dep === cfg.base ? cfg.baseMin : cfg.outMin);
+  for (const f of flights) { f.rule = showupRule(f, cfg); f.showup = f.std - 60000 * f.rule.min; }
   const me = (header.title.match(/\|\s*(\d{6,8})\s*\|/) || [])[1] || null;
   return { header, ym, days, flights, me, cfg };
 }
@@ -325,8 +343,7 @@ function buildRows(M) {
         R.items.push({ t:'FLY', f:p, blk: a != null && b != null ? dur(b - a) : null });
         R.std = HM(p.std);
         R.su = HM(p.showup);
-        const rm = p.dep === cfg.base ? cfg.baseMin : cfg.outMin;
-        R.suNote = `STD −${Math.floor(rm/60)}:${p2(rm%60)}`;
+        R.suNote = `STD −${Math.floor(p.rule.min/60)}:${p2(p.rule.min%60)}`;
         if (p.sta != null) { R.sta = HM(p.sta); const dd = dayDiff(p.std, p.sta); if (dd) R.staNote = `${MD(p.sta)} (${dd > 0 ? '+' : ''}${dd})`; }
         if (mine) R.duty = mine[2];
       } else if (k === 'ARR') {
@@ -403,7 +420,8 @@ function renderSheet(M) {
     <div class="stats">${cards.map(([k, v, c]) => `<div class="stat"><span>${k}</span><b style="color:${c}">${v}</b></div>`).join('')}</div>
     <table><thead><tr><th>날짜</th><th>구분</th><th class="c su">SHOW UP</th><th class="c">STD</th><th class="c">STA</th><th class="c">DUTY</th><th>내용</th></tr></thead>
     <tbody>${body}</tbody></table>
-    <div class="note">Show Up 규칙: ${esc(cfg.base)} 출발 STD ${rule(cfg.baseMin)}, 해외 출발 STD ${rule(cfg.outMin)}.
+    <div class="note">Show Up 규칙 (FOM 2.2.9.2, STD 기준): 국제선 ICN ${rule(cfg.intlICN)} · ICN 외 공항 ${rule(cfg.intlOther)} /
+    국내선 GMP ${rule(cfg.domGMP)} · ICN ${rule(cfg.domICN)} · 그 외 국내 공항 ${rule(cfg.domStn)}.
     스탠바이의 SHOW UP 칸은 스탠바이 시작 시각(로스터 원문 그대로)입니다. Block·체류시간은 공항 시간대로 환산해 계산한 값입니다.
     생성 ${now.getFullYear()}-${p2(now.getMonth()+1)}-${p2(now.getDate())} ${p2(now.getHours())}:${p2(now.getMinutes())}.</div>`;
 }
@@ -427,16 +445,20 @@ function summaryText(M) {
     }
     out.push(`${d} ${parts.join(' · ') || '-'}`);
   }
-  out.push('', `* Show Up: ${M.cfg.base} 출발 STD-${Math.floor(M.cfg.baseMin/60)}:${p2(M.cfg.baseMin%60)}, 해외 출발 STD-${Math.floor(M.cfg.outMin/60)}:${p2(M.cfg.outMin%60)} (현지시각)`);
+  const r = m => `-${Math.floor(m/60)}:${p2(m%60)}`, c = M.cfg;
+  out.push('', `* Show Up (FOM 2.2.9.2): 국제선 ICN ${r(c.intlICN)}, 그 외 ${r(c.intlOther)} / 국내선 GMP ${r(c.domGMP)}, ICN ${r(c.domICN)}, 지방 ${r(c.domStn)} (현지시각)`);
   return out.join('\n');
 }
 
 // ------------------------------------------------------------------ UI
 const $ = id => document.getElementById(id);
 let sources = [], model = null;
-const CFG_KEY = 'showup-cfg-v1';
-try { const c = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); if (c) { $('cBase').value = c.base; $('cBaseMin').value = c.baseMin; $('cOutMin').value = c.outMin; } } catch {}
-const cfg = () => ({ base: ($('cBase').value || 'ICN').toUpperCase().trim(), baseMin: +$('cBaseMin').value || 0, outMin: +$('cOutMin').value || 0 });
+const CFG_KEY = 'showup-cfg-v2';
+const RULE_IDS = { domGMP:'rDomGMP', domICN:'rDomICN', domStn:'rDomStn', intlICN:'rIntlICN', intlOther:'rIntlOther' };
+const RULE_DEFAULT = { domGMP:60, domICN:70, domStn:50, intlICN:95, intlOther:80 };
+try { const c = JSON.parse(localStorage.getItem(CFG_KEY) || 'null'); if (c) for (const k in RULE_IDS) if (Number.isFinite(c[k])) $(RULE_IDS[k]).value = c[k]; } catch {}
+const cfg = () => Object.fromEntries(Object.entries(RULE_IDS).map(([k, id]) => {
+  const v = $(id).value.trim(); return [k, v === '' || !Number.isFinite(+v) ? RULE_DEFAULT[k] : +v]; }));
 
 function toast(t) { const e = $('toast'); e.textContent = t; e.classList.add('on'); clearTimeout(e._t); e._t = setTimeout(() => e.classList.remove('on'), 2200); }
 function msg(t, kind) { const e = $('msg'); e.className = 'msg' + (t ? ' ' + kind : ''); e.textContent = t || ''; }
@@ -452,7 +474,7 @@ addEventListener('resize', fit);
 
 function render() {
   if (!sources.length) return;
-  const c = cfg(); localStorage.setItem(CFG_KEY, JSON.stringify(c));
+  const c = cfg(); try { localStorage.setItem(CFG_KEY, JSON.stringify(c)); } catch {}
   try {
     model = buildModel(sources, c);
     $('sheet').innerHTML = renderSheet(model);
@@ -481,7 +503,8 @@ const drop = $('drop');
 ['dragenter','dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave','drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
 drop.addEventListener('drop', e => addFiles([...e.dataTransfer.files].filter(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name))));
-['cBase','cBaseMin','cOutMin'].forEach(id => $(id).addEventListener('input', render));
+Object.values(RULE_IDS).forEach(id => $(id).addEventListener('input', render));
+$('rDefault').onclick = () => { for (const k in RULE_IDS) $(RULE_IDS[k]).value = RULE_DEFAULT[k]; render(); toast('기본값(FOM 2.2.9.2)으로 되돌렸습니다'); };
 
 // ------------------------------------------------------------------ export
 const baseName = () => `schedule_${model.ym[0]}${p2(model.ym[1])}`;
